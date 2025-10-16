@@ -2,12 +2,21 @@ from fastapi import FastAPI, HTTPException
 from database import db, test_connection
 from models import Transaction
 from bson import ObjectId
+from routers import all_routers
 
 app = FastAPI()
+
+# include all routers
+for router in all_routers:
+    app.include_router(router)
 
 @app.on_event("startup")
 async def startup_db_client():
     await test_connection()
+
+@app.get("/")
+async def root():
+    return {"message" : "Welcome to the Coinwise API. Visit /docs for API documentation."}
 
 # ✅ READ ALL
 @app.get("/transactions")
