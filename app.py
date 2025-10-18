@@ -1,6 +1,6 @@
 from fastapi import FastAPI, HTTPException
 from database import db, test_connection
-from models import Transaction
+from models.transaction import Transaction
 from bson import ObjectId
 from routers import all_routers
 
@@ -81,3 +81,7 @@ async def delete_transaction(transaction_id: str):
         raise HTTPException(status_code=404, detail="Transaction not found")
 
     return {"message": "Transaction deleted successfully"}
+
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run(app, host="0.0.0.0", port=8000)
