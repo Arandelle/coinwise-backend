@@ -25,8 +25,8 @@ class UserResponse(BaseModel):
     id: str = Field(alias="_id")
     email: str                      # ✅ Added
     username: str                   # ✅ Added
-    full_name: Optional[str] = None # ✅ Added
-    created_at: datetime
+    name: Optional[str] = None # ✅ Added
+    created_at: datetime = Field(default_factory=datetime.utcnow)
     is_active: bool = True  
     
     class Config:
