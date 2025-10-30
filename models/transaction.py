@@ -16,7 +16,7 @@ class PyObjectId(ObjectId): # Custom Pydantic type for MongoDB ObjectId
 
 class Transaction(BaseModel):
     id: Optional[str] = Field(default=None, alias="_id")
-    user_id: str
+    user_id: Optional[str] = None # backend will set this
     category_id: str
     name: str
     amount: float

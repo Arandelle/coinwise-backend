@@ -5,10 +5,9 @@ from utils.auth import (
     get_password_hash, 
     verify_password, 
     create_access_token,
-    decode_token,
-    oauth2_scheme
 )
 from database import db
+from utils.auth import get_current_user
 
 router = APIRouter(prefix="/auth", tags=["Authentication"])
 
@@ -61,6 +60,8 @@ async def signup(user: UserCreate):
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="An error occurred during signup"
         )
+
+
 @router.post("/login", response_model=Token)
 async def login(user: UserLogin):
     """Login user and return JWT token"""
@@ -96,30 +97,9 @@ async def login(user: UserLogin):
     
     return {"access_token": access_token, "token_type": "bearer"}
 
+
 @router.get("/me", response_model=UserResponse)
-async def get_current_user(token: str = Depends(oauth2_scheme)):
-    """Get current logged-in user"""
-    credentials_exception = HTTPException(
-        status_code=status.HTTP_401_UNAUTHORIZED,
-        detail="Could not validate credentials",
-        headers={"WWW-Authenticate": "Bearer"},
-    )
+async def get_current_user(current_user: dict = Depends(get_current_user)):
+    """Return the currently logged-in user"""
+    return current_user
     
-    # Decode token
-    payload = decode_token(token)
-    if payload is None:
-        raise credentials_exception
-    
-    email: str = payload.get("sub")
-    if email is None:
-        raise credentials_exception
-    
-    # Get user from database
-    user = await db.users.find_one({"email": email})
-    if user is None:
-        raise credentials_exception
-    
-    # Convert ObjectId to string
-    user["_id"] = str(user["_id"])
-    
-    return user
