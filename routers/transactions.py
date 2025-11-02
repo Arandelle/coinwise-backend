@@ -19,7 +19,7 @@ async def get_my_transactions(current_user: dict = Depends(get_current_user)):
 
 # ✅ READ ONE (user's own transactions only)
 @router.get("/{transaction_id}")
-async def get_transaction(transaction_id: str, transaction: Transaction, current_user: dict = Depends(get_current_user)):
+async def get_transaction(transaction_id: str, current_user: dict = Depends(get_current_user)):
     
     user_id = current_user["_id"]
     
@@ -35,8 +35,8 @@ async def get_transaction(transaction_id: str, transaction: Transaction, current
             detail="Transaction not found or you don't have access"
         )
     
-    transaction["_id"] = str(transaction["_id"])
-    return transaction    
+    existing_transaction["_id"] = str(existing_transaction["_id"])
+    return existing_transaction    
 
 
 
@@ -47,7 +47,7 @@ async def create_transaction(transaction: Transaction, current_user: dict = Depe
     # ✅ Convert the Pydantic model to a Python dict
     #    - by_alias=True → use MongoDB field name "_id" instead of "id"
     #    - exclude_unset=True → skip fields that weren’t provided
-    new_tx = transaction.dict(by_alias=True, exclude_unset=True)
+    new_tx = transaction.dict(by_alias=True, exclude_none=True)
 
     # force the user_id to be the authenticated user (prevent spoofing)
     new_tx["user_id"] = current_user["_id"]
@@ -89,7 +89,7 @@ async def update_transaction(
             detail="Transaction not found or you don't have access"
         )
     
-    updated_tx = transaction.dict(by_alias=True, exclude_unset=True)
+    updated_tx = transaction.dict(by_alias=True,exclude_none=True, exclude={"_id", "created_at"})
     
     # prevent user from changing the user_id to someone else's
     result = await db["transactions"].update_one(
