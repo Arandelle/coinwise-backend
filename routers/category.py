@@ -19,10 +19,10 @@ async def get_my_category(current_user: dict = Depends(get_current_user)):
 
 
 @router.get("/{categoryId}")
-async def get_specific_category(category_id: str, current_user: dict = Depends(get_current_user)):
+async def get_specific_category(categoryId: str, current_user: dict = Depends(get_current_user)):
     user_id = current_user["_id"]
     specific_category = await db["categories"].find_one({
-        "_id" : ObjectId(category_id),
+        "_id" : ObjectId(categoryId),
         "user_id" : user_id
     })
         
