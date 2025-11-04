@@ -10,12 +10,81 @@ router = APIRouter(prefix="/transactions", tags=["Transactions"])
 @router.get("/")
 async def get_my_transactions(current_user: dict = Depends(get_current_user)):
     user_id = current_user["_id"]
-    transactions = await db["transactions"].find({"user_id": user_id}).to_list(length=None)
-    for tx in transactions:
-        tx["_id"] = str(tx["_id"])
+    
+    pipeline = [
+        # Match the user's transactions
+        {"$match" : {"user_id" : user_id}},
+        
+        # Convert category_id string to ObjectId for lookups
+        {
+            "$addFields" : {
+                "category_object_id" : {"$toObjectId" : "$category_id"}
+                }
+        },
+        # Join with categories collection
+        {
+            "$lookup" :{
+                "from" : "categories",
+                "localField" : "category_object_id",
+                "foreignField" : "_id",
+                "as" : "category"
+            }
+        },
+        {"$unwind" : {
+                "path" : "$category",
+                "preserveNullAndEmptyArrays" : True
+            }
+        },
+        
+        # Convert group_id to ObjectId
+        {
+            "$addFields" : {"group_object_id" :{ "$toObjectId" : "$category.group_id"}}
+        },
+        
+        # Join category_groups collection
+        {
+            "$lookup" :{
+                "from" : "category_groups",
+                "localField" : "group_object_id",
+                "foreignField" : "_id",
+                "as" : "group"
+            }
+        },
+        {"$unwind" : {"path" : "$group", "preserveNullAndEmptyArrays" : True}},
+        
+        # Shape the final output
+        {
+            "$project" : {
+                "_id": {"$toString": "$_id"},
+                "user_id": 1,
+                "category_id": 1,
+                "name": 1,
+                "amount": 1,
+                "type": 1,
+                "label": 1,
+                "note": 1,
+                "balance_after": 1,
+                "date": 1,
+                "date_only": 1,
+                "created_at": 1,
+                
+                # Add enriched category details
+                "category_details": {
+                    "id": {"$toString": "$category._id"},
+                    "name": "$category.category_name",
+                    "icon": "$category.icon",
+                    "type": "$category.type",
+                    "group_id": "$category.group_id",
+                    "group_name": "$group.group_name"
+                }
+            }
+        },
+        
+        # sort by date (newest first)
+        {"$sort" : {"date" : -1}}
+    ]
+    transactions = await db["transactions"].aggregate(pipeline).to_list(None)
     return transactions
-
-
 
 # ✅ READ ONE (user's own transactions only)
 @router.get("/{transaction_id}")

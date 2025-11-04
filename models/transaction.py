@@ -21,7 +21,6 @@ class Transaction(BaseModel):
     name: str
     amount: float
     type: str
-    category: str
     label: Optional[str] = None
     note: Optional[str] = None
 
