@@ -15,11 +15,23 @@ async def get_my_transactions(current_user: dict = Depends(get_current_user)):
         # Match the user's transactions
         {"$match" : {"user_id" : user_id}},
         
-        # Convert category_id string to ObjectId for lookups
+        # Convert category_id string to ObjectId, handle empty/null values
         {
             "$addFields" : {
-                "category_object_id" : {"$toObjectId" : "$category_id"}
+                "category_object_id" : {
+                    
+                    "$cond" : {
+                      "if" : {
+                          "$and" : [
+                              {"$ne" : ["$category_id", ""]},
+                              {"$ne" : ["$category_id", None]}
+                          ]
+                      },
+                    "then" : {"$toObjectId" : "$category_id"},
+                    "else" : None  
+                    }
                 }
+            }
         },
         # Join with categories collection
         {
@@ -38,7 +50,14 @@ async def get_my_transactions(current_user: dict = Depends(get_current_user)):
         
         # Convert group_id to ObjectId
         {
-            "$addFields" : {"group_object_id" :{ "$toObjectId" : "$category.group_id"}}
+            "$addFields" : {"group_object_id" : { 
+                "$cond" : {
+                    "if" : {"$ne" : ["$category.group_id", None]},
+                    "then" : {"$toObjectId" : "$category.group_id"},
+                    "else" : None
+                    }
+                }
+            }
         },
         
         # Join category_groups collection
@@ -70,12 +89,24 @@ async def get_my_transactions(current_user: dict = Depends(get_current_user)):
                 
                 # Add enriched category details
                 "category_details": {
-                    "id": {"$toString": "$category._id"},
-                    "name": "$category.category_name",
-                    "icon": "$category.icon",
-                    "type": "$category.type",
-                    "group_id": "$category.group_id",
-                    "group_name": "$group.group_name"
+                    "id": {
+                        "$ifNull" : [{"$toString" : "$category_id"}, ""]    
+                    },
+                   "name": {
+                        "$ifNull": ["$category.category_name", "Others"]
+                    },
+                    "icon": {
+                        "$ifNull": ["$category.icon", ""]
+                    },
+                    "type": {
+                        "$ifNull": ["$category.type", "$type"]
+                    },
+                    "group_id": {
+                        "$ifNull": ["$category.group_id", ""]
+                    },
+                    "group_name": {
+                        "$ifNull": ["$group.group_name", "Others"]
+                    }
                 }
             }
         },
