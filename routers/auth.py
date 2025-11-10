@@ -8,8 +8,118 @@ from utils.auth import (
 )
 from database import db
 from utils.auth import get_current_user
+from models.category import Category_Group
 
 router = APIRouter(prefix="/auth", tags=["Authentication"])
+
+async def create_default_category_groups_and_categories(user_id: str):
+    """Create default category groups and their categories for a new user"""
+    
+    # Define default structure matching your schema
+    defaults = [
+        {
+            "group": {
+                "name": "Essential Expenses",
+                "description": "Basic living expenses",
+                "type" : "expense"
+            },
+            "categories": [
+                {"category_name": "Housing", "type": "expense", "icon": "Home"},
+                {"category_name": "Groceries", "type": "expense", "icon": "ShoppingCart"},
+                {"category_name": "Transportation", "type": "expense", "icon": "Car"},
+                {"category_name": "Healthcare", "type": "expense", "icon": "Heart"}
+            ]
+        },
+        {
+            "group": {
+                "name": "Lifestyle",
+                "description": "Personal and entertainment expenses",
+                "type" : "expense"
+            },
+            "categories": [
+                {"category_name": "Dining Out", "type": "expense", "icon": "Utensils"},
+                {"category_name": "Entertainment", "type": "expense", "icon": "Film"},
+                {"category_name": "Shopping", "type": "expense", "icon": "ShoppingBag"},
+                {"category_name": "Travel", "type": "expense", "icon": "Plane"}
+            ]
+        },
+        {
+            "group": {
+                "name": "Income",
+                "description": "Sources of income",
+                "type" : "income"
+            },
+            "categories": [
+                {"category_name": "Salary", "type": "income", "icon": "Briefcase"},
+                {"category_name": "Freelance", "type": "income", "icon": "Code"},
+                {"category_name": "Investments", "type": "income", "icon": "TrendingUp"},
+                {"category_name": "Other Income", "type": "income", "icon": "DollarSign"}
+            ]
+        },
+        {
+            "group": {
+                "name": "Savings & Goals",
+                "description": "Long-term financial goals",
+                "type" : "expense"
+            },
+            "categories": [
+                {"category_name": "Emergency Fund", "type": "expense", "icon": "Shield"},
+                {"category_name": "Retirement", "type": "expense", "icon": "Palmtree"},
+                {"category_name": "Investment Fund", "type": "expense", "icon": "PiggyBank"},
+                {"category_name": "Debt Payment", "type": "expense", "icon": "CreditCard"}
+            ]
+        },
+        {
+            "group": {
+                "name": "Others",
+                "description": "Other expenses",
+                "type" : "expense"
+            },
+            "categories": [
+                {"category_name": "Others", "type": "expense", "icon": "Ellipsis"}
+            ]
+        },
+        {
+            "group": {
+                "name": "Others",
+                "description": "Other income",
+                "type" : "income"
+            },
+            "categories": [
+                {"category_name": "Others", "type": "income", "icon": "Ellipsis"}
+            ]
+        }
+    ]
+    
+    # Create category groups and their categories
+    for default in defaults:
+        # Create category group
+        group_doc = {
+            "user_id" : user_id,
+            "group_name" : default["group"]["name"],
+            "description" : default["group"]["description"],
+            "type" : default["group"]["type"],
+        }
+        
+        
+        group_result = await db.category_groups.insert_one(group_doc)
+        group_id = str(group_result.inserted_id)
+        
+        # Create categories for this group using YOUR schema
+        categories = []
+        for cat in default["categories"]:
+            category_doc = {
+                "user_id": user_id,
+                "group_id": group_id,  # Note: using "group_id" not "category_group_id"
+                "category_name": cat["category_name"],
+                "type": cat["type"],
+                "icon": cat["icon"],
+            }
+            categories.append(category_doc)
+        
+        # Insert all categories for this group
+        if categories:
+            await db.categories.insert_many(categories)
 
 @router.post("/signup", response_model=UserResponse, status_code=status.HTTP_201_CREATED)
 async def signup(user: UserCreate):
@@ -40,7 +150,10 @@ async def signup(user: UserCreate):
 
         # Insert into database
         result = await db.users.insert_one(user_dict)
-        print("Inserted ID:", result.inserted_id)
+        user_id = str(result.inserted_id)
+        print("Inserted ID:", user_id)
+        
+        await create_default_category_groups_and_categories(user_id)
 
         # Fetch created user
         created_user = await db.users.find_one({"_id": result.inserted_id})

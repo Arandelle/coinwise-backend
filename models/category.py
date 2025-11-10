@@ -7,6 +7,7 @@ class Category_Group(BaseModel):
     user_id: Optional[str] = Field(default=None, alias="user_id")
     group_name: str
     type: str
+    description: Optional[str] = Field(default=None, alias="description")
     created_at: datetime = Field(default_factory=datetime.now)
 
 class Category(BaseModel):
@@ -16,4 +17,5 @@ class Category(BaseModel):
     category_name: str
     type: str # expenses or income
     icon: Optional[str] = None
+    description: Optional[str] = None
     created_at: datetime = Field(default_factory=datetime.now)
