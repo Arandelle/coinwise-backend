@@ -7,6 +7,7 @@ from utils.auth import get_current_user
 router = APIRouter(prefix="/transactions", tags=["Transactions"])
 
 # READ (user's own transactions only)
+# Joining in category collection
 @router.get("/")
 async def get_my_transactions(current_user: dict = Depends(get_current_user)):
     user_id = current_user["_id"]
@@ -122,6 +123,10 @@ async def get_my_transactions(current_user: dict = Depends(get_current_user)):
 async def get_transaction(transaction_id: str, current_user: dict = Depends(get_current_user)):
     
     user_id = current_user["_id"]
+    
+    pipeline = [
+        {"$match" : {"user_id" : user_id}},
+    ]
     
     # check if transaction exist AND belongs to user
     existing_transaction = await db["transactions"].find_one({
