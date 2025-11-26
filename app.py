@@ -18,7 +18,7 @@ async def startup_db_client():
 
 @app.get("/")
 async def root():
-    return {"message" : "HI there!, Welcome to the Coinwise API. Visit /docs for API documentation."}
+    return {"message" : "Hi there!, Welcome to the Coinwise API. Visit /docs for API documentation."}
 
 if __name__ == "__main__":
     import uvicorn
