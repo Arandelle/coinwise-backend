@@ -16,50 +16,50 @@ router = APIRouter(prefix="/transactions", tags=["Transactions"])
 async def get_my_transactions(
     current_user: dict = Depends(get_current_user),
     # Pagination
-    page : int = Query(1, ge=1, description="Page number"),
+    page: int = Query(1, ge=1, description="Page number"),
     limit: int = Query(20, ge=1, le=100, description="Items per page"),
-    
+
     # Filtering
-    type: Optional[str] = Query(None, description="Filter by type: income or expense"),
-    category_id: Optional[str] = Query(None, description="Filter by category ID"),
-    date_from: Optional[str] = Query(None, description="Filter from date (YYYY-MM-DD)"),
+    type: Optional[str] = Query(
+        None, description="Filter by type: income or expense"),
+    category_id: Optional[str] = Query(
+        None, description="Filter by category ID"),
+    date_from: Optional[str] = Query(
+        None, description="Filter from date (YYYY-MM-DD)"),
     date_to: Optional[str] = Query(None, description="Filter to date"),
-    search: Optional[str] = Query(None, description="Search in transaction name or note"),
-    
+    search: Optional[str] = Query(
+        None, description="Search in transaction name or note"),
+
     # Sorting
     sort_by: str = Query("date", description="Sort by date, amount, name"),
     order: str = Query("desc", description="Sort order: desc or asc")
     ):
-    
+
     user_id = current_user["_id"]
-    
+
     # Build match conditions
-    match_conditions = {"user_id" : user_id}
-    
+    match_conditions = {"user_id": user_id}
+
     # Apply filters
     if type:
         match_conditions["type"] = type
     if category_id:
         match_conditions["category_id"] = category_id
-    
+
     # Date Range
-    if date_from and not date_to:
-        # Single date filter
-        start_date = datetime.fromisoformat(date_from)
-        end_of_day = start_date + timedelta(days=1)
-        
-        match_conditions["date"] = {
-            "$gte" : start_date,
-            "$lte" : end_of_day # to exclude next day
-        }
-    
-    elif date_from or date_to:
+    if date_from or date_to:
         match_conditions["date"] = {}
         if date_from:
             match_conditions["date"]["$gte"] = datetime.fromisoformat(date_from)
         if date_to:
-            match_conditions["date"]["$lte"] = datetime.fromisoformat(date_to)
-            
+            match_conditions["date"]["$lte"] = datetime.fromisoformat(date_to) + timedelta(days=1)  # Include entire end date
+    
+    elif date_from and date_to:
+        match_conditions["date"] = {
+            "$gte" : datetime.fromisoformat(date_from),
+            "$lte" : datetime.fromisoformat(date_to) + timedelta(days=1) # include entire end date
+        }
+     
     # Search filter (case-insensitive)
     if search:
         match_conditions["$or"] = [
