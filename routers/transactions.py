@@ -4,7 +4,7 @@ from database import db
 from models.transaction import Transaction
 from utils.auth import get_current_user
 from typing import Optional
-from datetime import datetime
+from datetime import datetime, timedelta
 
 router = APIRouter(prefix="/transactions", tags=["Transactions"])
 
@@ -43,7 +43,17 @@ async def get_my_transactions(
         match_conditions["category_id"] = category_id
     
     # Date Range
-    if date_from or date_to:
+    if date_from and not date_to:
+        # Single date filter
+        start_date = datetime.fromisoformat(date_from)
+        end_of_day = start_date + timedelta(days=1)
+        
+        match_conditions["date"] = {
+            "$gte" : start_date,
+            "$lte" : end_of_day # to exclude next day
+        }
+    
+    elif date_from or date_to:
         match_conditions["date"] = {}
         if date_from:
             match_conditions["date"]["$gte"] = datetime.fromisoformat(date_from)
@@ -62,7 +72,8 @@ async def get_my_transactions(
     sort_field = sort_by if sort_by in ["date", "amount", "name"] else "date"
     
     # calculate skip for pagination
-    skip = (page - 1) * limit
+    if limit and limit > 0:
+        skip = (page - 1) * limit
      
     pipeline = [
         # Match the user's transactions with filters
