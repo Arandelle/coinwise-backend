@@ -17,7 +17,7 @@ async def get_my_transactions(
     current_user: dict = Depends(get_current_user),
     # Pagination
     page: int = Query(1, ge=1, description="Page number"),
-    limit: int = Query(20, ge=1, le=100, description="Items per page"),
+    limit: Optional[int] = Query(None, ge=1, le=100, description="Items per page"),
 
     # Filtering
     type: Optional[str] = Query(
@@ -71,11 +71,8 @@ async def get_my_transactions(
     sort_order = -1 if order == "desc" else 1
     sort_field = sort_by if sort_by in ["date", "amount", "name"] else "date"
     
-    # calculate skip for pagination
-    if limit and limit > 0:
-        skip = (page - 1) * limit
-     
-    pipeline = [
+    # Baseline without pagination
+    base_pipeline = [
         # Match the user's transactions with filters
         {"$match": match_conditions},
 
@@ -180,10 +177,31 @@ async def get_my_transactions(
 
         # sort by specified field
         {"$sort": {sort_field: sort_order}},
+    ]
+    
+    # if limit is none, return all data without pagination
+    if limit is None:
+        transactions = await db["transactions"].aggregate(base_pipeline).to_list(None)    
+        total_count = len(transactions)
         
-        # Add facet for pagination + total count
+        return {
+        "transactions" : transactions,
+        "pagination" : {
+            "page" : 1,
+            "limit" : None,
+            "total" : total_count,
+            "total_pages" : 1,
+            "has_next" : False,
+            "has_prev" : False
+            }
+        }
+        
+    # Otherwise, apply pagination with $facet
+    skip = (page - 1) * limit
+    
+    pipeline = base_pipeline + [
         {
-            "$facet": {
+            '$facet' : {
                 "transactions" : [
                     {"$skip" : skip},
                     {"$limit" : limit}
@@ -199,7 +217,6 @@ async def get_my_transactions(
     transactions = result[0]["transactions"] if result else []
     total_count = result[0]["total_count"][0]["count"] if result and result[0]["total_count"] else 0
     
-    
     return {
         "transactions" : transactions,
         "pagination" : {
@@ -211,6 +228,7 @@ async def get_my_transactions(
             "has_prev" : page > 1
         }
     }
+    
 
 
 # ✅ READ ONE (user's own transactions only)
