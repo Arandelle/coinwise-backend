@@ -17,7 +17,8 @@ async def get_my_transactions(
     current_user: dict = Depends(get_current_user),
     # Pagination
     page: int = Query(1, ge=1, description="Page number"),
-    limit: Optional[int] = Query(None, ge=1, le=100, description="Items per page"),
+    limit: Optional[int] = Query(
+        None, ge=1, le=100, description="Items per page"),
 
     # Filtering
     type: Optional[str] = Query(
@@ -33,7 +34,7 @@ async def get_my_transactions(
     # Sorting
     sort_by: str = Query("date", description="Sort by date, amount, name"),
     order: str = Query("desc", description="Sort order: desc or asc")
-    ):
+):
 
     user_id = current_user["_id"]
 
@@ -50,27 +51,30 @@ async def get_my_transactions(
     if date_from or date_to:
         match_conditions["date"] = {}
         if date_from:
-            match_conditions["date"]["$gte"] = datetime.fromisoformat(date_from)
+            match_conditions["date"]["$gte"] = datetime.fromisoformat(
+                date_from)
         if date_to:
-            match_conditions["date"]["$lte"] = datetime.fromisoformat(date_to) + timedelta(days=1)  # Include entire end date
-    
+            match_conditions["date"]["$lte"] = datetime.fromisoformat(
+                date_to) + timedelta(days=1)  # Include entire end date
+
     elif date_from and date_to:
         match_conditions["date"] = {
-            "$gte" : datetime.fromisoformat(date_from),
-            "$lte" : datetime.fromisoformat(date_to) + timedelta(days=1) # include entire end date
+            "$gte": datetime.fromisoformat(date_from),
+            # include entire end date
+            "$lte": datetime.fromisoformat(date_to) + timedelta(days=1)
         }
-     
+
     # Search filter (case-insensitive)
     if search:
         match_conditions["$or"] = [
-            {"name" : {"$regex": search, "$options": "i"}},
-            {"note" : {"$regex": search, "$options" : "i"}}
+            {"name": {"$regex": search, "$options": "i"}},
+            {"note": {"$regex": search, "$options": "i"}}
         ]
-        
+
     # Sorting
     sort_order = -1 if order == "desc" else 1
     sort_field = sort_by if sort_by in ["date", "amount", "name"] else "date"
-    
+
     # Baseline without pagination
     base_pipeline = [
         # Match the user's transactions with filters
@@ -103,7 +107,7 @@ async def get_my_transactions(
                 "as": "category"
             }
         },
-        
+
         # flatten an array from lookup result
         # into a single object
         {"$unwind": {
@@ -178,113 +182,208 @@ async def get_my_transactions(
         # sort by specified field
         {"$sort": {sort_field: sort_order}},
     ]
-    
+
     # if limit is none, return all data without pagination
     if limit is None:
-        transactions = await db["transactions"].aggregate(base_pipeline).to_list(None)    
+        transactions = await db["transactions"].aggregate(base_pipeline).to_list(None)
         total_count = len(transactions)
-        
+
         return {
-        "transactions" : transactions,
-        "pagination" : {
-            "page" : 1,
-            "limit" : None,
-            "total" : total_count,
-            "total_pages" : 1,
-            "has_next" : False,
-            "has_prev" : False
+            "transactions": transactions,
+            "pagination": {
+                "page": 1,
+                "limit": None,
+                "total": total_count,
+                "total_pages": 1,
+                "has_next": False,
+                "has_prev": False
             }
         }
-        
+
     # Otherwise, apply pagination with $facet
     skip = (page - 1) * limit
-    
+
     pipeline = base_pipeline + [
         {
-            '$facet' : {
-                "transactions" : [
-                    {"$skip" : skip},
-                    {"$limit" : limit}
+            '$facet': {
+                "transactions": [
+                    {"$skip": skip},
+                    {"$limit": limit}
                 ],
-                "total_count" : [
-                    {"$count" : "count"}
+                "total_count": [
+                    {"$count": "count"}
                 ]
             }
         }
     ]
-    
+
     result = await db["transactions"].aggregate(pipeline).to_list(None)
     transactions = result[0]["transactions"] if result else []
     total_count = result[0]["total_count"][0]["count"] if result and result[0]["total_count"] else 0
-    
+
     return {
-        "transactions" : transactions,
-        "pagination" : {
-            "page" : page,
-            "limit" : limit,
-            "total" : total_count,
-            "total_pages" : (total_count + limit - 1 ) // limit,
-            "has_next" : page * limit < total_count,
-            "has_prev" : page > 1
+        "transactions": transactions,
+        "pagination": {
+            "page": page,
+            "limit": limit,
+            "total": total_count,
+            "total_pages": (total_count + limit - 1) // limit,
+            "has_next": page * limit < total_count,
+            "has_prev": page > 1
         }
     }
-    
+
+
 @router.get("/summary")
 async def get_transaction_summary(
     current_user: dict = Depends(get_current_user),
-    date_from: Optional[str] = Query(None, description="Start date (YYYY-MM-DD)"),
-    date_to: Optional[str] = Query(None, description="End data (YYYY-MM-DD)")
-    ):
-    
+    mode: str = Query(
+        "mothly",
+        description="Time period. daily, weekly, monthly, yearly, custom, all",
+        regex="^(daily|weekly|monthly|yearly|custom|all)$"
+    ),
+    month: Optional[int] = Query(
+        None, ge=1, le=12, description="Month (1-12). If not provided, uses current month"),
+    year: Optional[int] = Query(
+        None, ge=2000, le=2100, description="Year for monthly/yearly mode. If not provided, uses current year"),
+    date_from: Optional[str] = Query(
+        None, description="Start date for custom mode (YYYY-MM-DD)"),
+    date_to: Optional[str] = Query(
+        None, description="End date for custome mode (YYYY-MM-DD)")
+):
     user_id = current_user["_id"]
-    
-    match_conditions = {"user_id" : user_id}
-    
-    # Date filtering
-    if date_from or date_to:
+    match_conditions = {"user_id": user_id}
+
+    # Calculate date based on mode
+    now = datetime.now()
+
+    if mode == "daily":
+        # Today only
+        start_date = datetime(now.year, now.month, now.day)
+        end_date = start_date + timedelta(days=1)
+
+    elif mode == "weekly":
+        # Current week (Mon - Sun)
+        start_of_week = now - timedelta(days=now.weekday())
+        start_date = datetime(start_of_week.year,
+                              start_of_week.month, start_of_week.day)
+        end_date = start_date + timedelta(days=7)
+
+    elif mode == "monthly":
+        # Specific month or current month
+        target_year = year if year else now.year
+        target_month = month if month else now.month
+
+        start_date = datetime(target_year, target_month, 1)
+
+        # Get first day of next month
+        if target_month == 12:
+            end_date = datetime(target_year + 1, 1, 1)
+        else:
+            end_date = datetime(target_year, target_month + 1, 1)
+
+    elif mode == "yearly":
+
+        # Specific year or current year
+        target_year = year if year else now.year
+        start_date = datetime(target_year, 1, 1)
+        end_date = datetime(target_year + 1, 1, 1)
+
+    elif mode == "custom":
+        # Custom date range
+        if not date_from and not date_to:
+            raise HTTPException(
+                status_code=400,
+                detail="date_from/date_to required for custom mode"
+            )
+
+        if date_from or date_to:
+            start_date = datetime.fromisoformat(
+                date_from) if date_from else datetime(2000, 1, 1)
+            end_date = datetime.fromisoformat(
+                date_to) + timedelta(days=1) if date_to else now + timedelta(days=1)
+    elif mode == "all":
+        # No date filter
+        start_date = None
+        end_date = None
+
+    # Apply date filter if not in "all" mode
+    if mode != "all":
         match_conditions["date"] = {}
-        if date_from:
-            match_conditions["date"]["$gte"] = datetime.fromisoformat(date_from)
-        if date_to:
-            match_conditions["date"]["$lte"] = datetime.fromisoformat(date_to) + timedelta(days=1)
-            
+        if start_date:
+            match_conditions["date"]["$gte"] = start_date
+        if end_date:
+            match_conditions["date"]["$lte"] = end_date
+
+    # Aggregation pipeline
     pipeline = [
-        {"$match" : match_conditions},
+        {"$match": match_conditions},
         {
-            "$group" : {
-                "_id" : None,
-                "total_income" : {
-                    "$sum" : {
-                        "$cond" : [{"$eq" : ["$type", "income"]}, "$amount", 0]
+            "$group": {
+                "_id": None,
+                "total_income": {
+                    "$sum": {
+                        "$cond": [{"$eq": ["$type", "income"]}, "$amount", 0]
                     }
                 },
-                "total_expense" : {
-                    "$sum" : {
-                        "$cond" : [{"$eq" : ["$type", "expense"]}, "$amount", 0]
+                "total_expense": {
+                    "$sum": {
+                        "$cond": [{"$eq": ["$type", "expense"]}, "$amount", 0]
+                    }
+                },
+                "income_count": {
+                    "$sum": {
+                        "$cond": [{"$eq": ["$type", "income"]}, 1, 0]
+                    }
+                },
+                "expense_count": {
+                    "$sum": {
+                        "$cond": [{"$eq": ["$type", "expense"]}, 1, 0]
                     }
                 }
             }
         },
-        
+
         {
-            "$project" : {
-                "_id" : 0,
-                "total_income" : 1,
-                "total_expense" : 1,
-                "cash_flow" : {"$subtract": ["$total_income", "$total_expense"]}
+            "$project": {
+                "_id": 0,
+                "total_income": 1,
+                "total_expense": 1,
+                "income_count": 1,
+                "cash_flow": {
+                    "$subtract": ["$total_income", "$total_expense"]
+                },
+                "expense_count": 1,
+                "date_range": {
+                    "from": start_date.strftime("%Y-%m-%d") if start_date else None,
+                    "to": (end_date - timedelta(days=1)).strftime("$Y-%m-%d") if end_date else None
+                }
             }
         }
     ]
-    
+
     result = await db["transactions"].aggregate(pipeline).to_list(1)
-    
-    return result[0] if result else {
+
+    # Prepare response with date range info
+
+    response = result[0] if result else {
         "total_income": 0,
-        "total_expense" : 0,
-        "cash_flow" : 0
+        "total_expense": 0,
+        "cash_flow": 0,
+        "income_count": 0,
+        "expense_count": 0,
+        "date_range": {
+            "from":  None,
+            "to": None
+        }
     }
 
+    return response
+
+
 # ✅ READ ONE (user's own transactions only)
+
+
 @router.get("/{transaction_id}")
 async def get_transaction(transaction_id: str, current_user: dict = Depends(get_current_user)):
 
@@ -296,43 +395,43 @@ async def get_transaction(transaction_id: str, current_user: dict = Depends(get_
             "user_id": user_id,
             "_id": ObjectId(transaction_id)
         }},
-        
+
         # addField - Convert category_id string to ObjectId, handle empty/null values
         {
-            "$addFields" : {
-                "category_object_id" : {
-                    "$cond" : {
-                        "if" : {
-                            "$and" : [
-                                {"$ne" : ["$category_id", ""]},
-                                {"$ne" : ["$category_id", None]}
+            "$addFields": {
+                "category_object_id": {
+                    "$cond": {
+                        "if": {
+                            "$and": [
+                                {"$ne": ["$category_id", ""]},
+                                {"$ne": ["$category_id", None]}
                             ]
                         },
-                        "then" : {"$toObjectId" : "$category_id"},
-                        "else" : None
+                        "then": {"$toObjectId": "$category_id"},
+                        "else": None
                     }
                 }
             }
         },
         # look up - Join with categories collection
         {
-            "$lookup" : {
-                "from" : "categories",
-                "localField" : "category_object_id",
-                "foreignField" : "_id",
-                "as" : "category"
+            "$lookup": {
+                "from": "categories",
+                "localField": "category_object_id",
+                "foreignField": "_id",
+                "as": "category"
             }
         },
-        
+
         # unwind - flatten an array from lookup result
         # into a single object
         {
-            "$unwind" : {
-                "path" : "$category",
-                "preserveNullAndEmptyArrays" : True
+            "$unwind": {
+                "path": "$category",
+                "preserveNullAndEmptyArrays": True
             }
         },
-        
+
         # addField - Convert group_id to object id
         {
             "$addFields": {"group_object_id": {
@@ -344,7 +443,7 @@ async def get_transaction(transaction_id: str, current_user: dict = Depends(get_
             }
             }
         },
-        
+
         # Join category_groups collection
         {
             "$lookup": {
@@ -355,8 +454,8 @@ async def get_transaction(transaction_id: str, current_user: dict = Depends(get_
             }
         },
         {"$unwind": {"path": "$group", "preserveNullAndEmptyArrays": True}},
-        
-        
+
+
         # Shape the final output
         {
             "$project": {
@@ -402,7 +501,7 @@ async def get_transaction(transaction_id: str, current_user: dict = Depends(get_
     ]
 
     # check if transaction exist AND belongs to user
-    existing_transaction = await db["transactions"].aggregate(pipeline).to_list(1);
+    existing_transaction = await db["transactions"].aggregate(pipeline).to_list(1)
 
     if not existing_transaction:
         raise HTTPException(
