@@ -229,7 +229,60 @@ async def get_my_transactions(
         }
     }
     
-
+@router.get("/summary")
+async def get_transaction_summary(
+    current_user: dict = Depends(get_current_user),
+    date_from: Optional[str] = Query(None, description="Start date (YYYY-MM-DD)"),
+    date_to: Optional[str] = Query(None, description="End data (YYYY-MM-DD)")
+    ):
+    
+    user_id = current_user["_id"]
+    
+    match_conditions = {"user_id" : user_id}
+    
+    # Date filtering
+    if date_from or date_to:
+        match_conditions["date"] = {}
+        if date_from:
+            match_conditions["date"]["$gte"] = datetime.fromisoformat(date_from)
+        if date_to:
+            match_conditions["date"]["$lte"] = datetime.fromisoformat(date_to) + timedelta(days=1)
+            
+    pipeline = [
+        {"$match" : match_conditions},
+        {
+            "$group" : {
+                "_id" : None,
+                "total_income" : {
+                    "$sum" : {
+                        "$cond" : [{"$eq" : ["$type", "income"]}, "$amount", 0]
+                    }
+                },
+                "total_expense" : {
+                    "$sum" : {
+                        "$cond" : [{"$eq" : ["$type", "expense"]}, "$amount", 0]
+                    }
+                }
+            }
+        },
+        
+        {
+            "$project" : {
+                "_id" : 0,
+                "total_income" : 1,
+                "total_expense" : 1,
+                "cash_flow" : {"$subtract": ["$total_income", "$total_expense"]}
+            }
+        }
+    ]
+    
+    result = await db["transactions"].aggregate(pipeline).to_list(1)
+    
+    return result[0] if result else {
+        "total_income": 0,
+        "total_expense" : 0,
+        "cash_flow" : 0
+    }
 
 # ✅ READ ONE (user's own transactions only)
 @router.get("/{transaction_id}")
