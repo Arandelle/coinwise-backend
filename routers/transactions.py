@@ -238,7 +238,7 @@ async def get_my_transactions(
 async def get_transaction_summary(
     current_user: dict = Depends(get_current_user),
     mode: str = Query(
-        "mothly",
+        "monthly",
         description="Time period. daily, weekly, monthly, yearly, custom, all",
         regex="^(daily|weekly|monthly|yearly|custom|all)$"
     ),
