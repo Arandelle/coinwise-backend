@@ -17,7 +17,7 @@ class PromptRequest(BaseModel):
 
 # Initialize the Gemini model with a system instruction for personal finance
 model = genai.GenerativeModel(
-    model_name="gemini-2.0-flash",
+    model_name="gemini-2.5-flash",
     system_instruction="""
 You are Coinwise AI, an intelligent personal finance assistant and budget-tracking expert, a modern, AI-powered system designed to help users understand, manage, and optimize their finances.
 
