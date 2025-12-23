@@ -96,7 +96,7 @@ async def save_message(user_id: str, role: str, content: str):
 
 
 # Helper function to get conversation history
-async def get_conversation_history(user_id: str, limit: int = 20):
+async def get_conversation_history(user_id: str, limit: int = 20, skip: int = 0):
     """
         Retrive the last N messages from the conversation history
         Returns messages in chronological order (oldest first)
@@ -106,7 +106,7 @@ async def get_conversation_history(user_id: str, limit: int = 20):
         # Get message sorted by timestamp (newest first) then reverse
         cursor = db.ai_conversations.find({
             "user_id": user_id
-        }).sort("timestamp", -1).limit(limit)
+        }).sort("timestamp", -1).skip(skip).limit(limit)
 
         history = await cursor.to_list(length=limit)
 
@@ -200,13 +200,21 @@ async def clear_conversation(
 @router.get("/conversation-history")
 async def get_user_ai_conversation(
     limit: int = 20, 
+    skip: int = 0,
     current_user: dict = Depends(get_current_user)
     ):
     
     try:
         
         user_id = current_user["_id"]
-        history = await get_conversation_history(user_id, limit=limit)
+        
+        total_count = await db.ai_conversations.count_documents({"user_id" : user_id})
+        
+        history = await get_conversation_history(user_id, limit=limit, skip=skip)
+        
+        # Calculate current page
+        current_page = (skip // limit) + 1 if limit > 0 else 1
+        total_pages = (total_count + limit - 1) // limit if limit > 0 else 1
         
         # Format the response
         formatted_history = []
@@ -219,7 +227,13 @@ async def get_user_ai_conversation(
                 
         return {
             "history" : formatted_history,
-            "count" : len(formatted_history)
+            "count" : len(formatted_history),
+            "total" : total_count,
+            "has_more" : (skip + limit) < total_count,
+            "page" : current_page,
+            "total_pages" : total_pages,
+            "skip" : skip,
+            "limit" : limit 
         }
     except Exception as e:
         print(f"Error fetching conversation-history")
