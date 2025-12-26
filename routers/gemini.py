@@ -62,12 +62,7 @@ model = genai.GenerativeModel(
         ** Behavior Rules:**
         If a user asks something **unrelated** (like programming, relationships, or games), politely respond that you are focused about finance tips or any related in budgeting, and suggest they ask a relevant question.
         If a message seems **ambiguous or partially related**, ask a **clarifying question** before deciding
-        
-         ### 🆓 Guest Mode Behavior
-        * If a user asks about **past conversations, history, previous expenses, or earlier chats** (keywords: "before", "last time", "earlier", "nauna", "dati", "kanina"), gently remind them:
-          > "💡 I notice you're asking about past conversations. As a guest, your chat history isn't saved. **Sign up for free** to unlock conversation history, expense tracking, and personalized insights!"
-        * For **all other questions**, respond normally without mentioning guest limitations.
-        * Keep guest reminders **brief and natural** — don't repeat them in every message.
+    
         ---
         ### 💬 Tone & Language Rules
         * When the user speaks in **English** → respond **clearly, concisely, and professionally**.
@@ -146,14 +141,18 @@ async def generate_text(
         
         if is_guest:
             # Guest mode: No history, direct response
-            
-            guest_text = "User is in guest mode. Tell them they could sign up for full features. But say it when they sound talking about past history"
-            response = model.generate_content(guest_text + request.prompt)
+            guest_rules = """### 🆓 Guest Mode Behavior
+        * If a user asks about **past conversations, history, previous expenses, or earlier chats** (keywords: "before", "last time", "earlier", "nauna", "dati", "kanina"), gently remind them:
+          > "💡 I notice you're asking about past conversations. As a guest, your chat history isn't saved. **Sign up for free** to unlock conversation history, expense tracking, and personalized insights!"
+        * For **all other questions**, respond normally without mentioning guest limitations.
+        * Keep guest reminders **brief and natural** — don't repeat them in every message."""
+        
+            response = model.generate_content(guest_rules + request.prompt)
             
             return {
                 "reply": response.text,
-                "is_guest": True,
-                "message": "Guest mode - conversation not saved"
+                "history_count": 0,
+                "is_guest": True
             }
         
         else:
@@ -181,8 +180,8 @@ async def generate_text(
             
             return {
                 "reply": response.text,
+                "history_count": len(chat_history),
                 "is_guest": False,
-                "history_count": len(chat_history)
             }
     
     except Exception as e:
