@@ -1,7 +1,7 @@
 import bcrypt
 from jose import JWTError, jwt
 from datetime import datetime, timedelta
-from fastapi import Depends, HTTPException, status
+from fastapi import Depends, HTTPException, Header, status
 from fastapi.security import OAuth2PasswordBearer
 from typing import Optional
 import os
@@ -101,4 +101,58 @@ async def get_current_user(token: str = Depends(oauth2_scheme)):
     user["_id"] = str(user["_id"])
     
     # Fetch only transactions belonging to this user
+    return user
+
+
+async def get_current_user_optional(authorization: Optional[str] = Header(None)):
+    """Get current user or return guest if no auth provided"""
+    
+    # No authorization header - guest mode
+    if not authorization:
+        return {
+            "is_guest": True,
+            "_id": None,
+            "username": "Guest"
+        }
+    
+    # Extract token from "Bearer <token>"
+    if not authorization.startswith("Bearer "):
+        return {
+            "is_guest": True,
+            "_id": None,
+            "username": "Guest"
+        }
+    
+    token = authorization.split(" ")[1]
+    
+    # Guest token
+    if token == "guest":
+        return {
+            "is_guest": True,
+            "_id": None,
+            "username": "Guest"
+        }
+    
+    # Validate token
+    credentials_exception = HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail="Could not validate credentials",
+        headers={"WWW-Authenticate": "Bearer"},
+    )
+    
+    payload = decode_token(token)
+    if payload is None:
+        raise credentials_exception
+    
+    email: str = payload.get("sub")
+    if email is None:
+        raise credentials_exception
+    
+    user = await db.users.find_one({"email": email})
+    if user is None:
+        raise credentials_exception
+    
+    user["_id"] = str(user["_id"])
+    user["is_guest"] = False
+    
     return user
