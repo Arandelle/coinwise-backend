@@ -107,8 +107,20 @@ async def get_current_user(token: str = Depends(oauth2_scheme)):
 async def get_current_user_optional(authorization: Optional[str] = Header(None)):
     """Get current user or return guest if no auth provided"""
     
+    print(f"🔍 Authorization header received: {repr(authorization)}")
+    
     # No authorization header - guest mode
     if not authorization:
+        print("✅ Guest mode: No authorization header")
+        return {
+            "is_guest": True,
+            "_id": None,
+            "username": "Guest"
+        }
+    
+    # Check if it's empty string or whitespace
+    if not authorization.strip():
+        print("✅ Guest mode: Empty authorization header")
         return {
             "is_guest": True,
             "_id": None,
@@ -117,6 +129,7 @@ async def get_current_user_optional(authorization: Optional[str] = Header(None))
     
     # Extract token from "Bearer <token>"
     if not authorization.startswith("Bearer "):
+        print("⚠️ Invalid authorization format, treating as guest")
         return {
             "is_guest": True,
             "_id": None,
@@ -125,34 +138,56 @@ async def get_current_user_optional(authorization: Optional[str] = Header(None))
     
     token = authorization.split(" ")[1]
     
-    # Guest token
-    if token == "guest":
+    print(f"🔑 Token extracted: {token[:20]}..." if len(token) > 20 else f"🔑 Token: {token}")
+    
+    # Guest token or invalid tokens
+    if token in ["guest", "null", "undefined", ""]:
+        print(f"✅ Guest mode: Special token '{token}'")
         return {
             "is_guest": True,
             "_id": None,
             "username": "Guest"
         }
     
-    # Validate token
-    credentials_exception = HTTPException(
-        status_code=status.HTTP_401_UNAUTHORIZED,
-        detail="Could not validate credentials",
-        headers={"WWW-Authenticate": "Bearer"},
-    )
-    
-    payload = decode_token(token)
-    if payload is None:
-        raise credentials_exception
-    
-    email: str = payload.get("sub")
-    if email is None:
-        raise credentials_exception
-    
-    user = await db.users.find_one({"email": email})
-    if user is None:
-        raise credentials_exception
-    
-    user["_id"] = str(user["_id"])
-    user["is_guest"] = False
-    
-    return user
+    # Validate real token
+    try:
+        payload = decode_token(token)
+        if payload is None:
+            print("⚠️ Token decode failed, treating as guest")
+            return {
+                "is_guest": True,
+                "_id": None,
+                "username": "Guest"
+            }
+        
+        email: str = payload.get("sub")
+        if email is None:
+            print("⚠️ No email in token, treating as guest")
+            return {
+                "is_guest": True,
+                "_id": None,
+                "username": "Guest"
+            }
+        
+        user = await db.users.find_one({"email": email})
+        if user is None:
+            print(f"⚠️ User not found for email: {email}, treating as guest")
+            return {
+                "is_guest": True,
+                "_id": None,
+                "username": "Guest"
+            }
+        
+        user["_id"] = str(user["_id"])
+        user["is_guest"] = False
+        
+        print(f"✅ Authenticated user: {user.get('username', email)}")
+        return user
+        
+    except Exception as e:
+        print(f"⚠️ Token validation error: {str(e)}, treating as guest")
+        return {
+            "is_guest": True,
+            "_id": None,
+            "username": "Guest"
+        }
