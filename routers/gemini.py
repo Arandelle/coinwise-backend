@@ -6,7 +6,7 @@ from datetime import datetime
 import os
 
 from database import db
-from utils.auth import get_current_user
+from utils.auth import get_current_user, get_current_user_optional
 
 
 load_dotenv()
@@ -62,6 +62,12 @@ model = genai.GenerativeModel(
         ** Behavior Rules:**
         If a user asks something **unrelated** (like programming, relationships, or games), politely respond that you are focused about finance tips or any related in budgeting, and suggest they ask a relevant question.
         If a message seems **ambiguous or partially related**, ask a **clarifying question** before deciding
+        
+         ### 🆓 Guest Mode Behavior
+        * If a user asks about **past conversations, history, previous expenses, or earlier chats** (keywords: "before", "last time", "earlier", "nauna", "dati", "kanina"), gently remind them:
+          > "💡 I notice you're asking about past conversations. As a guest, your chat history isn't saved. **Sign up for free** to unlock conversation history, expense tracking, and personalized insights!"
+        * For **all other questions**, respond normally without mentioning guest limitations.
+        * Keep guest reminders **brief and natural** — don't repeat them in every message.
         ---
         ### 💬 Tone & Language Rules
         * When the user speaks in **English** → respond **clearly, concisely, and professionally**.
@@ -131,50 +137,57 @@ async def root():
 @router.post("/coinwise-ai")
 async def generate_text(
     request: PromptRequest,
-    current_user: dict = Depends(get_current_user)
+    current_user: dict = Depends(get_current_user_optional)
 ):
-
     try:
-        user_id = current_user["_id"]
-
-        # Save user message first
-        await save_message(user_id, "user", request.prompt)
-
-        # Retrieve conversation history (including the message the last message saved)
-        history = await get_conversation_history(user_id, limit=20)
-
-        # Build the conversation history for the AI
-        # Exclude the last message (current prompt) since it will send it separately
-        chat_history = []
-
-        # Exclude the last message (current user prompt)
-        for msg in history[:-1]:
-            chat_history.append({
-                "role": msg["role"],
-                "parts": [msg["content"]]
-            })
-
-        # Debug : Print history length
-        print(f"User {user_id} - History length: {len(chat_history)} messages")
-
-        # Start chat session with history
-        chat = model.start_chat(history=chat_history)
-
-        # Send the new message -
-        response = chat.send_message(request.prompt)
-
-        # Save AI response to the database
-        await save_message(user_id, "model", response.text)
-
-        return {
-            "reply": response.text,
-            "history_count": len(chat_history)  # For debugging
-        }
-
+        # Check if user is authenticated or guest
+        is_guest = current_user.get("is_guest", False)
+        user_id = current_user.get("_id") if not is_guest else None
+        
+        if is_guest:
+            # Guest mode: No history, direct response
+            
+            guest_text = "User is in guest mode. Tell them they could sign up for full features. But say it when they sound talking about past history"
+            response = model.generate_content(guest_text + request.prompt)
+            
+            return {
+                "reply": response.text,
+                "is_guest": True,
+                "message": "Guest mode - conversation not saved"
+            }
+        
+        else:
+            # Authenticated user: Full functionality with history
+            # Save user message first
+            await save_message(user_id, "user", request.prompt)
+            
+            # Retrieve conversation history
+            history = await get_conversation_history(user_id, limit=20)
+            
+            # Build chat history (exclude last message - current prompt)
+            chat_history = [
+                {"role": msg["role"], "parts": [msg["content"]]}
+                for msg in history[:-1]
+            ]
+            
+            print(f"User {user_id} - History length: {len(chat_history)} messages")
+            
+            # Start chat with history
+            chat = model.start_chat(history=chat_history)
+            response = chat.send_message(request.prompt)
+            
+            # Save AI response
+            await save_message(user_id, "model", response.text)
+            
+            return {
+                "reply": response.text,
+                "is_guest": False,
+                "history_count": len(chat_history)
+            }
+    
     except Exception as e:
         print(f"Error in generate_text: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
-
 
 @router.delete("/clear-conversation")
 async def clear_conversation(
