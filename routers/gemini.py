@@ -333,7 +333,8 @@ async def get_user_ai_conversation(
             formatted_history.append({
                 "role" : msg["role"],
                 "content" : msg["content"],
-                "timestamp" : msg["timestamp"].isoformat()
+                "timestamp" : msg["timestamp"].isoformat(),
+                "model_used" : msg["model_used"] if "model_used" in msg else None
             })
                 
         return {
