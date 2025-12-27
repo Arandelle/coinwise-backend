@@ -162,7 +162,7 @@ model_manager = ModelManager(
 
 
 # Helper function to save messages to the database
-async def save_message(user_id: str, role: str, content: str):
+async def save_message(user_id: str, role: str, content: str, model_name: str = None):
     """
         Save message to the conversational history.
         role: user or model
@@ -173,7 +173,8 @@ async def save_message(user_id: str, role: str, content: str):
             "user_id": user_id,
             "role": role,
             "content": content,
-            "timestamp": datetime.utcnow()
+            "timestamp": datetime.utcnow(),
+            "model_used": model_name
         }
 
         result = await db.ai_conversations.insert_one(message)
@@ -246,7 +247,8 @@ async def generate_text(
                 "is_guest": True,
                 "model_used" : current_model
             }
-        
+            
+        # Authenticated user flow
         else:
             # Authenticated user: Full functionality with history
             # Save user message first
@@ -267,13 +269,13 @@ async def generate_text(
             response = model_manager.generate_content_with_fallback(
                 request.prompt,
                 chat_history=chat_history)
-                        
-            # Save AI response
-            await save_message(user_id, "model", response.text)
-            
+        
             # Get current model
             current_model = model_manager.models[model_manager.current_model_index]["name"]
             
+            # Save AI response
+            await save_message(user_id, "model", response.text, model_name=current_model)
+
             return {
                 "reply": response.text,
                 "history_count": len(chat_history),
