@@ -31,14 +31,15 @@ class ModelManager:
         
         # models in order of preference
         self.models = [
-            {"name" : "gemini-2.0-flash", "priority" : 1},
+            {"name" : "gemini-2.5-flash", "priority" : 1},
             {"name" : "gemini-2.5-flash-lite", "priority" : 2},
             {"name" : "gemini-2.0-flash", "priority" : 3}
         ]
         
         self.current_model_index = 0
         self.system_instructions = system_instruction
-        
+    
+    # _private - underscore means private - outside code should not care how models are created
     def _create_model(self, model_name: str):
         """Create a GenerativeModel instance"""
         return genai.GenerativeModel(
